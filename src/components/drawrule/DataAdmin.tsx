@@ -36,7 +36,7 @@ function Field({
         placeholder={placeholder}
         maxLength={maxLength}
         inputMode={inputMode}
-        className="h-[0.32rem] w-full rounded-[0.04rem] bg-[#F7F7F7] px-[0.08rem] text-[0.14rem] text-[#333] outline-none"
+        className="h-[0.32rem] w-full rounded-[0.08rem] bg-[#EFEFF1] px-[0.09rem] text-[0.14rem] text-[#333] outline-none transition-shadow focus:bg-white focus:shadow-[0_0_0_2px_rgba(253,61,68,0.25)]"
       />
     </label>
   );
@@ -83,21 +83,21 @@ export default function DataAdmin({ info, manual, onClose, onRefresh, onManual }
   };
 
   return (
-    <div className="sheet-enter absolute inset-0 z-[60] flex flex-col bg-[#F6F6F6] text-[0.12rem]">
-      <header className="relative flex h-[0.538rem] shrink-0 items-center justify-center bg-white">
+    <div className="sheet-enter absolute inset-0 z-[60] flex flex-col bg-[#F2F2F7] text-[0.12rem]">
+      <header className="glass-sheet relative flex h-[0.538rem] shrink-0 items-center justify-center border-b border-black/5">
         <button
           type="button"
           onClick={onClose}
           aria-label="返回"
-          className="absolute left-[0.1rem] flex h-[0.35rem] w-[0.35rem] items-center justify-center"
+          className="absolute left-[0.08rem] flex h-[0.34rem] w-[0.34rem] items-center justify-center rounded-full bg-black/5"
         >
           <IconBack size={20} color="#333" />
         </button>
-        <h2 className="text-[0.16rem] font-bold text-[#333]">数据管理</h2>
+        <h2 className="text-[0.165rem] font-bold tracking-wide text-[#1c1c1e]">数据管理</h2>
       </header>
 
       <div className="no-scrollbar flex-1 overflow-y-auto px-[0.135rem] pt-[0.096rem] pb-[0.3rem]">
-        <section className="mb-[0.096rem] rounded-[0.06rem] bg-white px-[0.135rem] py-[0.135rem]">
+        <section className="ios-card mb-[0.12rem] px-[0.135rem] py-[0.135rem]">
           <h3 className="mb-[0.1rem] text-[0.14rem] leading-none font-bold text-[#333]">当前数据</h3>
           <div className="grid grid-cols-2 gap-y-[0.08rem] text-[0.12rem] text-[#555]">
             <span>
@@ -123,7 +123,7 @@ export default function DataAdmin({ info, manual, onClose, onRefresh, onManual }
             type="button"
             onClick={refresh}
             disabled={busy}
-            className="mt-[0.12rem] block h-[0.32rem] w-full rounded-[0.04rem] bg-[#FDECEC] text-[0.13rem] font-bold text-danger disabled:opacity-50"
+            className="mt-[0.12rem] block h-[0.34rem] w-full rounded-[0.08rem] bg-[#FFE9EA] text-[0.13rem] font-bold text-danger transition-transform active:scale-[0.99] disabled:opacity-50"
           >
             {busy ? "同步中…" : "立即同步云端数据"}
           </button>
@@ -132,7 +132,7 @@ export default function DataAdmin({ info, manual, onClose, onRefresh, onManual }
           </p>
         </section>
 
-        <section className="mb-[0.096rem] rounded-[0.06rem] bg-white px-[0.135rem] py-[0.135rem]">
+        <section className="ios-card mb-[0.12rem] px-[0.135rem] py-[0.135rem]">
           <h3 className="mb-[0.1rem] text-[0.14rem] leading-none font-bold text-[#333]">手动补录（本机生效）</h3>
           <div className="flex gap-[0.06rem]">
             <Field label="期号" value={period} onChange={setPeriod} placeholder="26306" maxLength={7} />
@@ -142,7 +142,7 @@ export default function DataAdmin({ info, manual, onClose, onRefresh, onManual }
           <button
             type="button"
             onClick={submit}
-            className="mt-[0.12rem] block h-[0.32rem] w-full rounded-[0.04rem] bg-danger text-[0.13rem] font-bold text-white"
+            className="mt-[0.12rem] block h-[0.34rem] w-full rounded-[0.08rem] bg-danger text-[0.13rem] font-bold text-white shadow-[0_6px_16px_rgba(253,61,68,0.32)] transition-transform active:scale-[0.99]"
           >
             保存补录
           </button>
@@ -152,7 +152,7 @@ export default function DataAdmin({ info, manual, onClose, onRefresh, onManual }
         </section>
 
         {manual.length ? (
-          <section className="mb-[0.096rem] rounded-[0.06rem] bg-white px-[0.135rem] py-[0.135rem]">
+          <section className="ios-card mb-[0.12rem] px-[0.135rem] py-[0.135rem]">
             <div className="mb-[0.08rem] flex items-center justify-between">
               <h3 className="text-[0.14rem] leading-none font-bold text-[#333]">已补录 {manual.length} 期</h3>
               <button

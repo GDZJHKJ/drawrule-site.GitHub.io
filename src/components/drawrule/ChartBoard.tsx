@@ -466,6 +466,8 @@ export default function ChartBoard({
       className="no-scrollbar relative overflow-x-hidden overflow-y-auto"
       style={{ height: "100%", background: "var(--skin-paper)" }}
     >
+      {/* 顶部留白：给浮动玻璃工具栏让位 */}
+      <div aria-hidden style={{ height: "0.48rem" }} />
       <div ref={boardRef} className="relative mx-auto" style={{ height: boardH, width: boardW }}>
         {/* 背景层 */}
         <div className="absolute inset-y-0 left-0 bg-brand" style={{ width: geo.stageW }} />
@@ -554,15 +556,19 @@ export default function ChartBoard({
           style={{ right: geo.endW - 1, width: 2 }}
         />
 
-        {/* 绘图层 */}
+        {/* 绘图层：锁定时完全不拦截触摸，滚动交还给容器（不卡顿） */}
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="absolute top-0 touch-none"
-          style={{ left: geo.stageW, cursor: locked ? "default" : "crosshair" }}
+          className={`absolute top-0 ${locked ? "" : "touch-none"}`}
+          style={{
+            left: geo.stageW,
+            cursor: locked ? "default" : "crosshair",
+            pointerEvents: locked ? "none" : "auto",
+          }}
         />
       </div>
     </div>

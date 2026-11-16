@@ -60,7 +60,7 @@ export default function Toolbar({
   onSettings,
 }: Props) {
   return (
-    <div className="relative z-30 flex h-tool w-full shrink-0 items-center bg-brand font-bold text-white">
+    <div className="glass-toolbar toolbar-text absolute inset-x-0 top-0 z-40 flex h-tool w-full items-center font-bold text-white">
       <div className="ml-[0.048rem]">
         <Item label="关闭" onClick={onClose}>
           <IconClose size={17} />

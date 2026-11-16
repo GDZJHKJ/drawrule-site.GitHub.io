@@ -14,9 +14,11 @@ const PREVIEW: Record<Skin, { brand: string; paper: string; ink: string; pale: s
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mb-[0.096rem] rounded-[0.06rem] bg-white px-[0.135rem] py-[0.135rem] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <h3 className="mb-[0.115rem] text-[0.14rem] leading-none font-bold text-[#333]">{title}</h3>
-      {children}
+    <section className="mb-[0.16rem]">
+      <h3 className="mb-[0.055rem] px-[0.05rem] text-[0.105rem] leading-none font-medium tracking-wide text-[#8e8e93]">
+        {title}
+      </h3>
+      <div className="ios-card px-[0.125rem] py-[0.125rem]">{children}</div>
     </section>
   );
 }
@@ -36,12 +38,12 @@ function Pill({
     <button
       type="button"
       onClick={onClick}
-      className={`h-[0.288rem] flex-1 rounded-[0.04rem] text-[0.13rem] leading-none transition-colors ${
+      className={`h-[0.288rem] flex-1 rounded-[0.08rem] text-[0.13rem] leading-none transition-all ${
         active
           ? solid
-            ? "bg-danger font-bold text-white"
-            : "bg-[#FDECEC] font-bold text-danger"
-          : "bg-[#F7F7F7] text-[#333]"
+            ? "bg-danger font-bold text-white shadow-[0_3px_10px_rgba(253,61,68,0.32)]"
+            : "bg-[#FFE9EA] font-bold text-danger"
+          : "bg-[#EFEFF1] text-[#3a3a3c]"
       }`}
     >
       {children}
@@ -134,17 +136,17 @@ export default function SettingsSheet({ open, settings, onChange, onClose, onSec
   ];
 
   return (
-    <div className="sheet-enter absolute inset-0 z-50 flex flex-col bg-[#F6F6F6]">
-      <header className="relative flex h-[0.538rem] shrink-0 items-center justify-center bg-white">
+    <div className="sheet-enter absolute inset-0 z-50 flex flex-col bg-[#F2F2F7]">
+      <header className="glass-sheet relative flex h-[0.538rem] shrink-0 items-center justify-center border-b border-black/5">
         <button
           type="button"
           onClick={onClose}
           aria-label="返回"
-          className="absolute left-[0.1rem] flex h-[0.35rem] w-[0.35rem] items-center justify-center"
+          className="absolute left-[0.08rem] flex h-[0.34rem] w-[0.34rem] items-center justify-center rounded-full bg-black/5"
         >
-          <IconBack size={20} color="#333" />
+          <IconBack size={17} color="#333" />
         </button>
-        <h2 className="text-[0.16rem] font-bold text-[#333]">设置</h2>
+        <h2 className="text-[0.165rem] font-bold tracking-wide text-[#1c1c1e]">设置</h2>
       </header>
 
       <div className="no-scrollbar flex-1 overflow-y-auto px-[0.135rem] pt-[0.096rem] pb-[0.3rem]">
@@ -173,8 +175,10 @@ export default function SettingsSheet({ open, settings, onChange, onClose, onSec
             {SKINS.map((s) => (
               <button key={s.key} type="button" onClick={() => onChange({ skin: s.key })} className="relative">
                 <div
-                  className={`overflow-hidden rounded-[0.03rem] border ${
-                    settings.skin === s.key ? "border-danger" : "border-transparent"
+                  className={`overflow-hidden rounded-[0.06rem] border-[1.5px] transition-all ${
+                    settings.skin === s.key
+                      ? "border-danger shadow-[0_0_0_3px_rgba(253,61,68,0.14)]"
+                      : "border-black/8"
                   }`}
                 >
                   <MiniChart skin={s.key} />
@@ -242,7 +246,7 @@ export default function SettingsSheet({ open, settings, onChange, onClose, onSec
                 <button key={o.key} type="button" onClick={() => onChange({ numStyle: o.key })} className="relative">
                   <div
                     className={`flex h-[0.42rem] items-center justify-center rounded-[0.03rem] ${
-                      active ? "bg-[#FDECEC]" : "bg-[#F7F7F7]"
+                      active ? "bg-[#FFE9EA]" : "bg-[#EFEFF1]"
                     }`}
                   >
                     <span className="flex items-center gap-[0.012rem]">

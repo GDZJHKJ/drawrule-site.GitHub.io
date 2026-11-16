@@ -38,7 +38,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
       {/* 色板 + 工具（展开态） */}
       <div className="pointer-events-auto absolute left-[0.2rem] bottom-[0.55rem] flex items-end">
         {open ? (
-          <div className="flex w-[0.3rem] flex-col items-center gap-[0.103rem] rounded-full bg-bar py-[0.08rem]">
+          <div className="glass-dark flex w-[0.3rem] flex-col items-center gap-[0.103rem] rounded-full py-[0.08rem]">
             {PALETTE.map((p) => (
               <button
                 key={p.color}
@@ -65,8 +65,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
               type="button"
               onClick={() => onTool(t.key)}
               aria-label={t.label}
-              className="flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full transition-colors"
-              style={{ background: tool === t.key ? "#FE0000" : "rgba(76,75,75,0.8)" }}
+              className={`flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full transition-all ${tool === t.key ? "bg-[#FE0000] shadow-[0_4px_12px_rgba(254,0,0,0.4)]" : "glass-dark"}`}
             >
               {t.icon}
             </button>
@@ -78,7 +77,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="颜色"
-        className="pointer-events-auto absolute bottom-0 left-[0.154rem] flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full bg-bar"
+        className="glass-dark pointer-events-auto absolute bottom-0 left-[0.154rem] flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full"
       >
         <span
           className="flex h-[0.298rem] w-[0.298rem] items-center justify-center rounded-full transition-transform"
@@ -91,7 +90,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
         type="button"
         onClick={onToggleLock}
         aria-label={locked ? "解锁" : "锁定"}
-        className={`pointer-events-auto absolute bottom-0 left-1/2 flex h-[0.404rem] w-[0.404rem] -translate-x-1/2 items-center justify-center rounded-full bg-bar transition-opacity ${open ? "opacity-0" : "opacity-100"}`}
+        className={`glass-dark pointer-events-auto absolute bottom-0 left-1/2 flex h-[0.404rem] w-[0.404rem] -translate-x-1/2 items-center justify-center rounded-full transition-opacity ${open ? "opacity-0" : "opacity-100"}`}
       >
         <IconLock size={25} color={locked ? "#FE0000" : "#ffffff"} open={!locked} />
       </button>
@@ -100,7 +99,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
       <button
         type="button"
         onClick={onSettings}
-        className="pointer-events-auto absolute right-[0.519rem] bottom-0 flex h-[0.5rem] items-center rounded-l-[0.5rem] bg-bar pr-[0.28rem] pl-[0.115rem] text-white"
+        className="glass-dark pointer-events-auto absolute right-[0.519rem] bottom-0 flex h-[0.5rem] items-center rounded-l-[0.5rem] pr-[0.28rem] pl-[0.115rem] text-white"
       >
         <span className="text-[0.14rem] leading-none">设置</span>
         <span className="mx-[0.1rem] h-[0.16rem] w-px bg-white/80" />
@@ -109,7 +108,7 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
         type="button"
         onClick={onSettings}
         aria-label="画笔设置"
-        className="pointer-events-auto absolute right-[0.115rem] bottom-[0.01rem] flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full bg-bar"
+        className="glass-dark pointer-events-auto absolute right-[0.115rem] bottom-[0.01rem] flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full"
       >
         <IconScribble size={22} color="#fff" />
       </button>

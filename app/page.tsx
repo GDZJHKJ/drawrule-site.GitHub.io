@@ -7,6 +7,7 @@ import BottomBar from "@/components/drawrule/BottomBar";
 import SettingsSheet from "@/components/drawrule/SettingsSheet";
 import TutorialMask from "@/components/drawrule/TutorialMask";
 import DataAdmin from "@/components/drawrule/DataAdmin";
+import SavePreview from "@/components/drawrule/SavePreview";
 import { DEFAULT_SETTINGS, type NumberStyle, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
 import { paintChart } from "@/components/drawrule/render";
 import { useDraws } from "@/lib/draws";
@@ -30,6 +31,7 @@ export default function Page() {
   const [tutorial, setTutorial] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [markers, setMarkers] = useState<Record<string, NumberStyle>>({});
+  const [saveImg, setSaveImg] = useState<{ src: string; name: string } | null>(null);
 
   /* 读取本地设置 */
   useEffect(() => {
@@ -144,11 +146,10 @@ export default function Page() {
         ink: c("--skin-ink", "#93c385"),
       },
     });
-    const a = document.createElement("a");
-    a.href = cv.toDataURL("image/png");
-    a.download = `走势画规-${draws[draws.length - 1]?.period ?? "chart"}.png`;
-    a.click();
-    flash("已保存为 PNG");
+    setSaveImg({
+      src: cv.toDataURL("image/png"),
+      name: `走势画规-${draws[draws.length - 1]?.period ?? "chart"}.png`,
+    });
   };
 
   const share = async () => {
@@ -192,20 +193,7 @@ export default function Page() {
 
   return (
     <main className="app-shell" data-skin={settings.skin}>
-      <Toolbar
-        canUndo={strokes.length > 0}
-        canRedo={redo.length > 0}
-        canClear={strokes.length > 0 || Object.keys(markers).length > 0}
-        onClose={close}
-        onUndo={undo}
-        onRedo={redoOne}
-        onClear={clearAll}
-        onShare={share}
-        onSave={save}
-        onSettings={() => setSheet(true)}
-      />
-
-      <div className="relative" style={{ height: "calc(100% - 0.48rem)" }}>
+      <div className="absolute inset-0">
         <ChartBoard
           draws={draws}
           settings={settings}
@@ -222,26 +210,41 @@ export default function Page() {
           boardRef={boardRef}
           onGeometry={setGeo}
         />
-
-        <BottomBar
-          color={color}
-          onColor={setColor}
-          locked={locked}
-          onToggleLock={() => {
-            setLocked((v) => !v);
-            flash(locked ? "已解锁，可以继续画线" : "已锁定，画板不可编辑");
-          }}
-          onSettings={() => setSheet(true)}
-          tool={tool}
-          onTool={setTool}
-        />
-
-        {toast ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[1.1rem] z-40 flex justify-center">
-            <span className="rounded-full bg-black/70 px-[0.12rem] py-[0.05rem] text-[0.12rem] text-white">{toast}</span>
-          </div>
-        ) : null}
       </div>
+
+      <Toolbar
+        canUndo={strokes.length > 0}
+        canRedo={redo.length > 0}
+        canClear={strokes.length > 0 || Object.keys(markers).length > 0}
+        onClose={close}
+        onUndo={undo}
+        onRedo={redoOne}
+        onClear={clearAll}
+        onShare={share}
+        onSave={save}
+        onSettings={() => setSheet(true)}
+      />
+
+      <BottomBar
+        color={color}
+        onColor={setColor}
+        locked={locked}
+        onToggleLock={() => {
+          setLocked((v) => !v);
+          flash(locked ? "已解锁，可以继续画线" : "已锁定，可以上下滑动画板");
+        }}
+        onSettings={() => setSheet(true)}
+        tool={tool}
+        onTool={setTool}
+      />
+
+      {toast ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[1.1rem] z-40 flex justify-center">
+          <span className="glass-dark rounded-full px-[0.14rem] py-[0.06rem] text-[0.12rem] text-white">{toast}</span>
+        </div>
+      ) : null}
+
+      {saveImg ? <SavePreview src={saveImg.src} fileName={saveImg.name} onClose={() => setSaveImg(null)} /> : null}
 
       {tutorial ? <TutorialMask onDismiss={dismissTutorial} /> : null}
 

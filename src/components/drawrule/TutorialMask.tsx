@@ -38,8 +38,8 @@ function Hand({ className }: { className?: string }) {
 export default function TutorialMask({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div
-      className="absolute inset-0 z-40"
-      style={{ top: "0.48rem", background: "rgba(0,0,0,0.45)" }}
+      className="tutorial-overlay absolute inset-0 z-40"
+      style={{ top: "0.48rem" }}
       onClick={onDismiss}
       role="presentation"
     >
@@ -68,7 +68,7 @@ export default function TutorialMask({ onDismiss }: { onDismiss: () => void }) {
           <button
             type="button"
             onClick={onDismiss}
-            className="h-[0.33rem] w-[1.02rem] rounded-[0.07rem] border-[1.5px] border-white/90 text-[0.15rem] leading-none text-white"
+            className="glass-dark h-[0.36rem] w-[1.06rem] rounded-full text-[0.15rem] leading-none font-bold text-white"
           >
             知道了
           </button>
