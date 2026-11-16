@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  IconBookmark,
   IconClose,
-  IconDownload,
   IconGear,
   IconRedo,
   IconShare,
@@ -14,6 +14,8 @@ type Props = {
   canUndo: boolean;
   canRedo: boolean;
   canClear: boolean;
+  /** 有未保存的画规改动 */
+  dirty?: boolean;
   onClose: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -28,20 +30,25 @@ function Item({
   children,
   onClick,
   disabled,
+  badge,
 }: {
   label: string;
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  badge?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex h-tool w-[0.519rem] flex-col items-center justify-center gap-[0.03rem] text-white transition-opacity duration-120 active:opacity-60 disabled:opacity-40"
+      className="relative flex h-tool w-[0.519rem] flex-col items-center justify-center gap-[0.03rem] text-white transition-opacity duration-120 active:opacity-60 disabled:opacity-40"
     >
       {children}
+      {badge ? (
+        <span className="absolute top-[0.1rem] right-[0.1rem] h-[0.05rem] w-[0.05rem] rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.18)]" />
+      ) : null}
       <span className="text-label leading-none font-bold">{label}</span>
     </button>
   );
@@ -51,6 +58,7 @@ export default function Toolbar({
   canUndo,
   canRedo,
   canClear,
+  dirty = false,
   onClose,
   onUndo,
   onRedo,
@@ -79,8 +87,8 @@ export default function Toolbar({
       <Item label="分享" onClick={onShare}>
         <IconShare size={17} />
       </Item>
-      <Item label="保存" onClick={onSave}>
-        <IconDownload size={17} />
+      <Item label="保存" onClick={onSave} badge={dirty}>
+        <IconBookmark size={17} />
       </Item>
       <Item label="设置" onClick={onSettings}>
         <IconGear size={17} />

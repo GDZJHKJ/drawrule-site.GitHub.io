@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Draw } from "@/data/draws";
 import type { Marker, Settings, Stroke, ToolMode, Point } from "./types";
 import { FONT_SCALE } from "./types";
-import { EMPTY_ROWS, drawHandles, drawStrokeBadges, drawStrokeBody, midOf, pointInCell } from "./render";
+import { EMPTY_ROWS, drawHandles, drawStrokeBadges, drawStrokeBody, midOf } from "./render";
 
 export type Geometry = {
   u: number;
@@ -61,7 +61,7 @@ type Props = {
 
 type DragState = {
   id: string;
-  /** endpoint = 拖端点改挂靠号码；bend = 拖中点折弯；pan = 自由笔迹整体平移 */
+  /** endpoint = 拖端点改挂靠号码；bend = 折弯（含拖线身新插入的折点）；pan = 自由笔迹整体平移 */
   mode: "endpoint" | "bend" | "pan";
   /** 端点/中间点在线段数组里的下标；-1 表示「两点直线插入新中点」 */
   index: number;
@@ -69,6 +69,8 @@ type DragState = {
   base: Point[];
   /** 当前（最近一次）位置，松手时用于吸附 */
   points: Point[];
+  /** 未插入折点前的原始点：单击线身不应留下多余折点 */
+  orig?: Point[];
   startX: number;
   startY: number;
 };
@@ -98,6 +100,17 @@ export default function ChartBoard({
   const tapRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const [containerW, setContainerW] = useState(0);
+  /** 折弯把手只在操作后 2 秒内显示，之后自动消失（避免长期压在号码上） */
+  const [handleOn, setHandleOn] = useState(false);
+  const handleTimer = useRef<number | null>(null);
+  const pokeHandles = useCallback(() => {
+    setHandleOn(true);
+    if (handleTimer.current) window.clearTimeout(handleTimer.current);
+    handleTimer.current = window.setTimeout(() => setHandleOn(false), 2000);
+  }, []);
+  useEffect(() => () => {
+    if (handleTimer.current) window.clearTimeout(handleTimer.current);
+  }, []);
 
   /* ---------- 容器宽度自适应 ---------- */
   useLayoutEffect(() => {
@@ -211,12 +224,11 @@ export default function ChartBoard({
     cBg.clearRect(0, 0, canvasSize.w, canvasSize.h);
     const all = draft ? [...strokes, draft] : strokes;
     const digits = visible.map((d) => d.num);
-    for (const s of all) {
-      drawStrokeBody(cBg, s);
-      drawHandles(cBg, s, geo, visible.length);
-    }
+    for (const s of all) drawStrokeBody(cBg, s);
     for (const s of all) drawStrokeBadges(cFg, s, digits, numFs);
-  }, [strokes, draft, canvasSize, numFs, visible, geo]);
+    // 折弯把手只在操作后 2 秒内出现在最上层，随后自动消失
+    if (handleOn) for (const s of all) drawHandles(cFg, s);
+  }, [strokes, draft, canvasSize, numFs, visible, handleOn]);
 
   useEffect(() => {
     render();
@@ -239,9 +251,9 @@ export default function ChartBoard({
     return { id: s.id, mode, index, base: copy, points: copy, startX: x, startY: y };
   };
 
-  /** 拖端点 = 换挂靠号码（徽标压在号码格正中，半径很小，保持最高优先级） */
+  /** 拖端点 = 换挂靠号码（徽标压在号码格正中，半径贴合圆徽标本身，别抢走整格） */
   const pickEndpoint = (x: number, y: number): DragState | null => {
-    const r = numFs * 0.62 + 6;
+    const r = numFs * 0.56 + 5;
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       if (!s.badges || s.points.length < 2) continue;
@@ -253,7 +265,7 @@ export default function ChartBoard({
     return null;
   };
 
-  /** 拖中点把手 = 折弯（两点直线首次拖动会插入一个中点）；压在号码格上的把手不可抓 */
+  /** 拖中点把手 = 折弯（两点直线首次拖动会插入一个中点） */
   const pickBend = (x: number, y: number): DragState | null => {
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
@@ -264,8 +276,7 @@ export default function ChartBoard({
           ? s.points.slice(1, -1).map((p, k) => ({ p, index: k + 1 }))
           : [{ p: midOf(s.points[0], s.points[last]), index: -1 }];
       for (const c of cand) {
-        if (pointInCell(c.p, geo, visible.length)) continue;
-        if (Math.hypot(c.p.x - x, c.p.y - y) < 24) return mkDrag(s, "bend", c.index, x, y);
+        if (Math.hypot(c.p.x - x, c.p.y - y) < 20) return mkDrag(s, "bend", c.index, x, y);
       }
     }
     return null;
@@ -283,60 +294,124 @@ export default function ChartBoard({
     return null;
   };
 
+  /**
+   * 拖动线身 = 在该处插入折点并折弯 ——
+   * 不必先精确点中中点把手，随手指按住线的任意位置拖即可。
+   */
+  const pickBody = (x: number, y: number): DragState | null => {
+    let best: { s: Stroke; seg: number; t: number; dist: number } | null = null;
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      if (!s.badges || s.points.length < 2) continue;
+      for (let k = 0; k < s.points.length - 1; k++) {
+        const a = s.points[k];
+        const b = s.points[k + 1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy || 1;
+        const t = Math.min(Math.max(((x - a.x) * dx + (y - a.y) * dy) / len2, 0), 1);
+        const dist = Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy));
+        if (dist < 12 && (!best || dist < best.dist)) best = { s, seg: k, t, dist };
+      }
+    }
+    if (!best) return null;
+    const { s, seg, t } = best;
+    const a = s.points[seg];
+    const b = s.points[seg + 1];
+    const base = s.points.map((p) => ({ ...p }));
+    base.splice(seg + 1, 0, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    return {
+      id: s.id,
+      mode: "bend",
+      index: seg + 1,
+      base,
+      points: base,
+      orig: s.points.map((p) => ({ ...p })),
+      startX: x,
+      startY: y,
+    };
+  };
+
   /* ---------- 指针交互 ---------- */
+  const grabR = Math.max(numFs * 0.5, 14);
+
+  const startStroke = (x: number, y: number, cell: { row: number; col: number } | null) => {
+    const start: Point = cell ? { ...cellCenter(cell.row, cell.col), ...cell } : { x, y };
+    setDraft({
+      id: `s${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
+      mode: tool,
+      color,
+      width: 2.5,
+      points: [start],
+      badges: tool !== "free",
+    });
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (locked) return;
     const { x, y } = toLocal(e);
     tapRef.current = { x: e.clientX, y: e.clientY, moved: false };
+    const cell = hitCell(x, y);
+    const center = cell ? cellCenter(cell.row, cell.col) : null;
+    /** 号码中心那一圈是「抓号码」，号码格其余区域留给线条 */
+    const nearNumber = !!center && Math.hypot(center.x - x, center.y - y) < grabR;
+    const capture = () => (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
-    // 1) 端点徽标优先：徽标本来就盖在号码格正中，点中徽标 = 拖端点换号
+    // 1) 端点徽标：拖端点换号
     const ep = pickEndpoint(x, y);
     if (ep) {
       dragRef.current = ep;
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      pokeHandles();
+      capture();
       return;
     }
 
-    // 2) 号码格优先于线条：即使有连线穿过该号码，点击/起线仍然归号码
-    const cell = hitCell(x, y);
+    // 2) 可见的折弯把手（操作后 2 秒内）→ 直接拖那个折点
+    if (handleOn) {
+      const bend = pickBend(x, y);
+      if (bend) {
+        dragRef.current = bend;
+        pokeHandles();
+        capture();
+        return;
+      }
+    }
+
+    // 3) 号码中心：单击打标记，拖出即连线
+    if (cell && nearNumber) {
+      startStroke(x, y, cell);
+      capture();
+      return;
+    }
+
+    // 4) 按住线身任意位置拖动 = 插入折点并折弯
+    const body = pickBody(x, y);
+    if (body) {
+      dragRef.current = body;
+      pokeHandles();
+      capture();
+      return;
+    }
+
+    // 5) 号码格其余区域：同样可以起线
     if (cell) {
-      const start: Point = { ...cellCenter(cell.row, cell.col), ...cell };
-      const stroke: Stroke = {
-        id: `s${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
-        mode: tool,
-        color,
-        width: 2.5,
-        points: [start],
-        badges: tool !== "free",
-      };
-      setDraft(stroke);
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      startStroke(x, y, cell);
+      capture();
       return;
     }
 
-    // 3) 非号码区：折弯把手 → 自由笔迹平移 → 自由画笔起笔
-    const bend = pickBend(x, y);
-    if (bend) {
-      dragRef.current = bend;
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      return;
-    }
+    // 6) 自由笔迹平移
     const pan = pickFree(x, y);
     if (pan) {
       dragRef.current = pan;
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      capture();
       return;
     }
+
+    // 7) 自由画笔起笔
     if (tool !== "free") return;
-    setDraft({
-      id: `s${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
-      mode: "free",
-      color,
-      width: 2.5,
-      points: [{ x, y }],
-      badges: false,
-    });
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    startStroke(x, y, null);
+    capture();
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -351,8 +426,11 @@ export default function ChartBoard({
       let next: Point[];
 
       if (d.mode === "endpoint") {
+        // 端点始终留在号码区，松手才能吸附到某个号码
         next = d.base.map((p, i) =>
-          i === d.index ? { ...p, x: clamp(p.x + dx, 0, canvasSize.w), y: clamp(p.y + dy, 0, canvasSize.h), row: undefined, col: undefined } : p,
+          i === d.index
+            ? { ...p, x: clamp(p.x + dx, geo.statW, canvasSize.w), y: clamp(p.y + dy, 0, canvasSize.h), row: undefined, col: undefined }
+            : p,
         );
       } else if (d.mode === "bend") {
         if (d.index < 0) {
@@ -406,13 +484,26 @@ export default function ChartBoard({
   };
 
   const onPointerUp = () => {
+    const moved = tapRef.current?.moved ?? false;
     if (dragRef.current) {
       const d = dragRef.current;
-      // 端点松手吸附号码格；折弯点保持自由位置
-      const snapped = d.mode === "endpoint" ? d.points.map((p, i) => (i === d.index ? snapPoint(p) : p)) : d.points;
-      onUpdateStroke(d.id, snapped);
       dragRef.current = null;
       tapRef.current = null;
+      if (d.mode === "endpoint") {
+        // 端点松手吸附号码格；折弯点保持自由位置
+        onUpdateStroke(d.id, d.points.map((p, i) => (i === d.index ? snapPoint(p) : p)));
+      } else if (d.mode === "bend" && !moved) {
+        // 只是点了一下线/把手：不留下多余折点；点在线上的号码照样打标记
+        if (d.orig) onUpdateStroke(d.id, d.orig);
+        const c = hitCell(d.startX, d.startY);
+        if (c) {
+          const row = visible[c.row];
+          if (row) onToggleMarker(row.period, c.col);
+        }
+      } else {
+        onUpdateStroke(d.id, d.points);
+      }
+      pokeHandles();
       return;
     }
     if (!draft) {
@@ -439,7 +530,10 @@ export default function ChartBoard({
       const b = pts[pts.length - 1];
       ok = pts.length > 1 && !(a.row === b.row && a.col === b.col);
     }
-    if (ok) onCommit(draft);
+    if (ok) {
+      onCommit(draft);
+      pokeHandles(); // 画完给 2 秒折弯把手提示
+    }
     setDraft(null);
   };
 

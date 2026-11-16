@@ -9,8 +9,8 @@ type Props = {
 };
 
 /**
- * 保存预览：把当前画板渲染成一张长图，
- * 手机上长按图片即可「存储到照片」；桌面提供下载按钮兜底。
+ * 分享预览：把当前画板渲染成一张长图，
+ * 手机上长按图片即可「存储到照片」或转发；桌面提供下载按钮兜底。
  */
 export default function SavePreview({ src, fileName, onClose }: Props) {
   return (
@@ -19,10 +19,10 @@ export default function SavePreview({ src, fileName, onClose }: Props) {
         className="glass-sheet sheet-enter flex max-h-full w-full flex-col overflow-hidden rounded-[0.2rem] shadow-[0_24px_60px_rgba(0,0,0,0.28)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="保存图片"
+        aria-label="分享图片"
       >
         <div className="relative flex h-[0.42rem] shrink-0 items-center justify-center">
-          <h3 className="text-[0.14rem] font-bold text-[#222]">长按图片保存到相册</h3>
+          <h3 className="text-[0.14rem] font-bold text-[#222]">长按图片保存或分享</h3>
           <button
             type="button"
             onClick={onClose}
@@ -38,7 +38,7 @@ export default function SavePreview({ src, fileName, onClose }: Props) {
         </div>
 
         <div className="flex shrink-0 items-center justify-between gap-[0.1rem] border-t border-black/6 px-[0.12rem] py-[0.09rem]">
-          <p className="text-[0.1rem] leading-[1.4] text-[#8e8e93]">长按上方图片即可保存到相册</p>
+          <p className="text-[0.1rem] leading-[1.4] text-[#8e8e93]">长按上方图片即可保存到相册或转发给好友</p>
           <a
             href={src}
             download={fileName}

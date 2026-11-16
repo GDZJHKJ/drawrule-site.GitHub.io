@@ -83,32 +83,15 @@ export function drawStrokeBadges(ctx: CanvasRenderingContext2D, s: Stroke, digit
   }
 }
 
-/** 点是否落在某个真实号码格里（行内、列内、且不是空行） */
-export function pointInCell(p: { x: number; y: number }, geo: Geo, visibleRows: number) {
-  const row = Math.floor(p.y / geo.rowH);
-  if (row < 0 || row >= visibleRows) return false;
-  if (p.x < geo.statW) return false;
-  if (p.x > geo.statW + geo.frontW * 4 + geo.endW) return false;
-  return true;
+/** 折弯把手：两点线取中点，多点线取每个中间折点 */
+export function handlePointsOf(s: Stroke) {
+  if (!s.badges || s.points.length < 2) return [] as { x: number; y: number }[];
+  return s.points.length > 2 ? s.points.slice(1, -1) : [midOf(s.points[0], s.points[1])];
 }
 
-/**
- * 可拖拽的折弯把手。落在号码格上的把手不画也不可抓 ——
- * 号码点击优先于线条，压在数字上的把手既抓不到、又会挡住数字。
- */
-export function handlePointsOf(s: Stroke, geo: Geo, visibleRows: number) {
-  if (!s.badges || s.points.length < 1) return [] as { x: number; y: number }[];
-  const pts =
-    s.points.length > 2
-      ? s.points.slice(1, -1)
-      : s.points.length === 2
-        ? [midOf(s.points[0], s.points[1])]
-        : [];
-  return pts.filter((p) => !pointInCell(p, geo, visibleRows));
-}
-
-export function drawHandles(ctx: CanvasRenderingContext2D, s: Stroke, geo: Geo, visibleRows: number) {
-  for (const m of handlePointsOf(s, geo, visibleRows)) drawHandle(ctx, m.x, m.y, s.color);
+/** 把手画在号码上层的徽标层，但只在操作后 2 秒内显示（见 ChartBoard 的 handleOn） */
+export function drawHandles(ctx: CanvasRenderingContext2D, s: Stroke) {
+  for (const m of handlePointsOf(s)) drawHandle(ctx, m.x, m.y, s.color);
 }
 
 type PaintOpts = {
@@ -138,13 +121,10 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   ctx.fillRect(geo.stageW, 0, geo.statW, o.height);
   ctx.fillRect(geo.stageW + geo.statW + geo.frontW * 4, 0, geo.endW, o.height);
 
-  // 连线画在号码下方：穿过号码时不遮挡数字
+  // 连线画在号码下方：穿过号码时不遮挡数字（导出图不含临时折弯把手）
   ctx.save();
   ctx.translate(geo.stageW, 0);
-  for (const s of strokes) {
-    drawStrokeBody(ctx, s);
-    drawHandles(ctx, s, geo, visible.length);
-  }
+  for (const s of strokes) drawStrokeBody(ctx, s);
   ctx.restore();
 
   ctx.textAlign = "center";

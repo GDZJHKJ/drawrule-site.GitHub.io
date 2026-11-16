@@ -59,6 +59,19 @@ export function IconDownload({ className, size = 17, strokeWidth = 1.9, color = 
   );
 }
 
+export function IconBookmark({ className, size = 17, strokeWidth = 1.9, color = "currentColor" }: P) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6.5 4.5h11a1 1 0 011 1v14l-6.5-4.2L5.5 19.5v-14a1 1 0 011-1z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconGear({ className, size = 17, strokeWidth = 1.7, color = "currentColor" }: P) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>

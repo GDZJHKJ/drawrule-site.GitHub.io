@@ -8,12 +8,22 @@ import SettingsSheet from "@/components/drawrule/SettingsSheet";
 import TutorialMask from "@/components/drawrule/TutorialMask";
 import DataAdmin from "@/components/drawrule/DataAdmin";
 import SavePreview from "@/components/drawrule/SavePreview";
-import { DEFAULT_SETTINGS, type Marker, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
+import { DEFAULT_SETTINGS, type Marker, type Point, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
 import { paintChart } from "@/components/drawrule/render";
 import { useDraws } from "@/lib/draws";
 
 const STORE_KEY = "drawrule:settings:v1";
 const TUT_KEY = "drawrule:tutorial:v1";
+const CHART_KEY = "drawrule:chart:v1";
+
+type PackedPoint = { row: number; col: number } | { fx: number; fy: number };
+type SavedChart = {
+  latest: string;
+  rows: number;
+  savedAt: string;
+  markers: Record<string, Marker>;
+  strokes: { id: string; mode: ToolMode; color: string; width: number; badges: boolean; points: PackedPoint[] }[];
+};
 
 export default function Page() {
   const { draws, info, refresh, manual, setManual } = useDraws();
@@ -32,6 +42,8 @@ export default function Page() {
   const [toast, setToast] = useState<string | null>(null);
   const [markers, setMarkers] = useState<Record<string, Marker>>({});
   const [saveImg, setSaveImg] = useState<{ src: string; name: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [booted, setBooted] = useState(false);
 
   /* 读取本地设置 */
   useEffect(() => {
@@ -42,6 +54,7 @@ export default function Page() {
     } catch {
       /* ignore */
     }
+    setBooted(true);
   }, []);
 
   const patch = useCallback((p: Partial<Settings>) => {
@@ -76,14 +89,99 @@ export default function Page() {
       setStrokes([]);
       setRedo([]);
       setMarkers({});
+      setDirty(false);
+      try {
+        localStorage.removeItem(CHART_KEY);
+      } catch {
+        /* ignore */
+      }
       if (had) flash("开奖数据已更新，画板已重置");
     }
     lastPeriodRef.current = p;
   }, [draws, flash]);
 
+  /* ---------- 画规存取：归一化坐标，缩放/换设备都能对上号码 ---------- */
+  const packPoint = useCallback(
+    (p: Point): PackedPoint =>
+      p.row !== undefined && p.col !== undefined
+        ? { row: p.row, col: p.col }
+        : { fx: (p.x - geo.statW) / geo.frontW, fy: p.y / geo.rowH },
+    [geo],
+  );
+
+  const centerOf = useCallback(
+    (row: number, col: number) => ({
+      x: col < 4 ? geo.statW + geo.frontW * (col + 0.5) : geo.statW + geo.frontW * 4 + geo.endW / 2,
+      y: geo.rowH * (row + 0.5),
+    }),
+    [geo],
+  );
+
+  const unpackPoint = useCallback(
+    (q: PackedPoint): Point =>
+      "row" in q ? { ...centerOf(q.row, q.col), row: q.row, col: q.col } : { x: geo.statW + q.fx * geo.frontW, y: q.fy * geo.rowH },
+    [centerOf, geo],
+  );
+
+  /* 打开页面：恢复上次「保存」下来的画规（期号不一致则不恢复，避免错行） */
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !booted || !draws.length) return;
+    restoredRef.current = true;
+    let saved: SavedChart | null = null;
+    try {
+      const raw = localStorage.getItem(CHART_KEY);
+      if (raw) saved = JSON.parse(raw) as SavedChart;
+    } catch {
+      saved = null;
+    }
+    if (!saved || !saved.strokes) return;
+    const latest = draws[draws.length - 1].period;
+    if (saved.latest !== latest || saved.rows !== settings.rows) {
+      try {
+        localStorage.removeItem(CHART_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const rows = saved.strokes.map((s) => ({ ...s, points: s.points.map(unpackPoint) }));
+    setStrokes(rows as Stroke[]);
+    setMarkers(saved.markers ?? {});
+    setRedo([]);
+    setDirty(false);
+    flash("已恢复上次保存的画规");
+  }, [booted, draws, settings.rows, unpackPoint, flash]);
+
+  /* 缩放/窗口宽度变化：按比例缩放已画的线，避免与号码错位 */
+  const prevU = useRef<number | null>(null);
+  useEffect(() => {
+    const u = geo.u;
+    const before = prevU.current;
+    prevU.current = u;
+    if (!before || Math.abs(before - u) < 0.01) return;
+    const k = u / before;
+    setStrokes((prev) => (prev.length ? prev.map((s) => ({ ...s, points: s.points.map((p) => ({ ...p, x: p.x * k, y: p.y * k })) })) : prev));
+  }, [geo.u]);
+
+  /* 期数设置变更：可见行切片变了，行号对不上，画规只能清空 */
+  const prevRows = useRef<number | null>(null);
+  useEffect(() => {
+    const before = prevRows.current;
+    prevRows.current = settings.rows;
+    if (before === null || before === settings.rows) return;
+    setStrokes((prev) => {
+      if (prev.length) flash("期数已变更，画规已清空");
+      return [];
+    });
+    setRedo([]);
+    setDirty(false);
+  }, [settings.rows, flash]);
+
   const commit = useCallback((s: Stroke) => {
     setStrokes((prev) => [...prev, s]);
     setRedo([]);
+    setDirty(true);
   }, []);
 
   const undo = () => {
@@ -91,6 +189,7 @@ export default function Page() {
       if (!prev.length) return prev;
       const last = prev[prev.length - 1];
       setRedo((r) => [...r, last]);
+      setDirty(true);
       return prev.slice(0, -1);
     });
   };
@@ -100,11 +199,12 @@ export default function Page() {
       if (!prev.length) return prev;
       const last = prev[prev.length - 1];
       setStrokes((s) => [...s, last]);
+      setDirty(true);
       return prev.slice(0, -1);
     });
   };
 
-  /* 清除：画线 + 号码标记一起清 */
+  /* 清除：画线 + 号码标记一起清，同时删掉已保存的画规 */
   const clearAll = () => {
     const hadStroke = strokes.length > 0;
     const hadMarker = Object.keys(markers).length > 0;
@@ -112,10 +212,46 @@ export default function Page() {
     if (hadStroke) setRedo((r) => [...r, ...strokes]);
     setStrokes([]);
     setMarkers({});
+    setDirty(false);
+    try {
+      localStorage.removeItem(CHART_KEY);
+    } catch {
+      /* ignore */
+    }
     flash(hadMarker && !hadStroke ? "已清除号码标记" : hadMarker ? "已清除画线与标记" : "已清除全部画线");
   };
 
-  const save = async () => {
+  /* 保存：把画规（连线 + 标记）存到本机，下次打开自动恢复 */
+  const saveChart = () => {
+    if (!strokes.length && !Object.keys(markers).length) {
+      flash("还没有画规可保存");
+      return;
+    }
+    const payload: SavedChart = {
+      latest: draws.length ? draws[draws.length - 1].period : "",
+      rows: settings.rows,
+      savedAt: new Date().toISOString(),
+      markers,
+      strokes: strokes.map((s) => ({
+        id: s.id,
+        mode: s.mode,
+        color: s.color,
+        width: s.width,
+        badges: s.badges,
+        points: s.points.map(packPoint),
+      })),
+    };
+    try {
+      localStorage.setItem(CHART_KEY, JSON.stringify(payload));
+      setDirty(false);
+      flash(`画规已保存：${strokes.length} 条连线 · ${Object.keys(markers).length} 个标记`);
+    } catch {
+      flash("保存失败：浏览器本地存储不可用");
+    }
+  };
+
+  /* 分享：生成整张画板长图并预览，长按即可保存 / 转发 */
+  const makeImage = async () => {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = geo.boardW;
     const total = Math.min(settings.rows, draws.length) + 6;
@@ -152,20 +288,6 @@ export default function Page() {
     });
   };
 
-  const share = async () => {
-    const data = { title: "走势画规 · 排列五走势画板", text: "排列五走势画板", url: window.location.href };
-    try {
-      if (navigator.share) {
-        await navigator.share(data);
-        return;
-      }
-      await navigator.clipboard.writeText(window.location.href);
-      flash("链接已复制");
-    } catch {
-      flash("分享已取消");
-    }
-  };
-
   const close = () => {
     if (window.history.length > 1) window.history.back();
     else flash("这是演示页，关闭不会离开");
@@ -191,6 +313,7 @@ export default function Page() {
       else next[key] = { style: settings.numStyle, color };
       return next;
     });
+    setDirty(true);
   }, [settings.numStyle, color]);
 
   return (
@@ -202,9 +325,10 @@ export default function Page() {
           strokes={strokes}
           markers={markers}
           onCommit={commit}
-          onUpdateStroke={(id, points) =>
-            setStrokes((prev) => prev.map((s) => (s.id === id ? { ...s, points } : s)))
-          }
+          onUpdateStroke={(id, points) => {
+            setStrokes((prev) => prev.map((s) => (s.id === id ? { ...s, points } : s)));
+            setDirty(true);
+          }}
           onToggleMarker={toggleMarker}
           locked={locked}
           color={color}
@@ -218,12 +342,13 @@ export default function Page() {
         canUndo={strokes.length > 0}
         canRedo={redo.length > 0}
         canClear={strokes.length > 0 || Object.keys(markers).length > 0}
+        dirty={dirty}
         onClose={close}
         onUndo={undo}
         onRedo={redoOne}
         onClear={clearAll}
-        onShare={share}
-        onSave={save}
+        onShare={makeImage}
+        onSave={saveChart}
         onSettings={() => setSheet(true)}
       />
 
