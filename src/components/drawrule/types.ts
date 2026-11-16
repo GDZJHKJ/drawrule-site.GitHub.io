@@ -13,7 +13,8 @@ export type Settings = {
   numStyle: NumberStyle;
 };
 
-export type Marker = { period: string; col: number; style: NumberStyle };
+/** 号码标记：形状来自设置里的「号码样式」，颜色跟随当前画笔颜色 */
+export type Marker = { style: NumberStyle; color: string };
 
 export type Point = { x: number; y: number; row?: number; col?: number };
 

@@ -8,7 +8,7 @@ import SettingsSheet from "@/components/drawrule/SettingsSheet";
 import TutorialMask from "@/components/drawrule/TutorialMask";
 import DataAdmin from "@/components/drawrule/DataAdmin";
 import SavePreview from "@/components/drawrule/SavePreview";
-import { DEFAULT_SETTINGS, type NumberStyle, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
+import { DEFAULT_SETTINGS, type Marker, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
 import { paintChart } from "@/components/drawrule/render";
 import { useDraws } from "@/lib/draws";
 
@@ -30,7 +30,7 @@ export default function Page() {
   const [admin, setAdmin] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [markers, setMarkers] = useState<Record<string, NumberStyle>>({});
+  const [markers, setMarkers] = useState<Record<string, Marker>>({});
   const [saveImg, setSaveImg] = useState<{ src: string; name: string } | null>(null);
 
   /* 读取本地设置 */
@@ -180,16 +180,18 @@ export default function Page() {
     }
   };
 
-  /* 单击号码：按当前「号码样式」打标记，再点一次取消 */
+  /* 单击号码：用当前画笔颜色给号码打标记（颜色与画规线同一套逻辑）；
+   * 同色再点 = 取消，换一种颜色再点 = 直接改色 */
   const toggleMarker = useCallback((period: string, col: number) => {
     const key = `${period}:${col}`;
     setMarkers((prev) => {
       const next = { ...prev };
-      if (next[key]) delete next[key];
-      else next[key] = settings.numStyle;
+      const cur = next[key];
+      if (cur && cur.color.toLowerCase() === color.toLowerCase()) delete next[key];
+      else next[key] = { style: settings.numStyle, color };
       return next;
     });
-  }, [settings.numStyle]);
+  }, [settings.numStyle, color]);
 
   return (
     <main className="app-shell" data-skin={settings.skin}>

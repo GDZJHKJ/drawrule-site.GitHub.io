@@ -65,7 +65,8 @@ export default function BottomBar({ color, onColor, locked, onToggleLock, onSett
               type="button"
               onClick={() => onTool(t.key)}
               aria-label={t.label}
-              className={`flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full transition-all ${tool === t.key ? "bg-[#FE0000] shadow-[0_4px_12px_rgba(254,0,0,0.4)]" : "glass-dark"}`}
+              className={`flex h-[0.404rem] w-[0.404rem] items-center justify-center rounded-full transition-all ${tool === t.key ? "shadow-[0_4px_12px_rgba(0,0,0,0.28)]" : "glass-dark"}`}
+              style={tool === t.key ? { background: color } : undefined}
             >
               {t.icon}
             </button>

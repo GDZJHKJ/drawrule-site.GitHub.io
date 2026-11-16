@@ -1,5 +1,5 @@
 import type { Draw } from "@/data/draws";
-import type { NumberStyle, Settings, Stroke } from "./types";
+import type { Marker, Settings, Stroke } from "./types";
 import { FONT_SCALE } from "./types";
 
 export type Geo = { u: number; stageW: number; statW: number; frontW: number; endW: number; rowH: number };
@@ -59,12 +59,8 @@ export function drawHandle(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.restore();
 }
 
-export function drawStroke(
-  ctx: CanvasRenderingContext2D,
-  s: Stroke,
-  digits: string[],
-  numFs: number,
-) {
+/** 线身（画在号码下方的连线层），不画徽标与把手 */
+export function drawStrokeBody(ctx: CanvasRenderingContext2D, s: Stroke) {
   if (s.points.length < 2) return;
   ctx.save();
   ctx.strokeStyle = s.color;
@@ -75,14 +71,44 @@ export function drawStroke(
   s.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.stroke();
   ctx.restore();
+}
 
-  if (!s.badges) return;
+/** 端点徽标（画在号码上方的徽标层） */
+export function drawStrokeBadges(ctx: CanvasRenderingContext2D, s: Stroke, digits: string[], numFs: number) {
+  if (s.points.length < 2 || !s.badges) return;
   const ends = [s.points[0], s.points[s.points.length - 1]];
   for (const p of ends) {
     if (p.row === undefined || p.col === undefined) continue;
     drawBadge(ctx, p.x, p.y, digits[p.row]?.[p.col] ?? "", s.color, numFs);
   }
-  for (const m of handlePoints(s)) drawHandle(ctx, m.x, m.y, s.color);
+}
+
+/** 点是否落在某个真实号码格里（行内、列内、且不是空行） */
+export function pointInCell(p: { x: number; y: number }, geo: Geo, visibleRows: number) {
+  const row = Math.floor(p.y / geo.rowH);
+  if (row < 0 || row >= visibleRows) return false;
+  if (p.x < geo.statW) return false;
+  if (p.x > geo.statW + geo.frontW * 4 + geo.endW) return false;
+  return true;
+}
+
+/**
+ * 可拖拽的折弯把手。落在号码格上的把手不画也不可抓 ——
+ * 号码点击优先于线条，压在数字上的把手既抓不到、又会挡住数字。
+ */
+export function handlePointsOf(s: Stroke, geo: Geo, visibleRows: number) {
+  if (!s.badges || s.points.length < 1) return [] as { x: number; y: number }[];
+  const pts =
+    s.points.length > 2
+      ? s.points.slice(1, -1)
+      : s.points.length === 2
+        ? [midOf(s.points[0], s.points[1])]
+        : [];
+  return pts.filter((p) => !pointInCell(p, geo, visibleRows));
+}
+
+export function drawHandles(ctx: CanvasRenderingContext2D, s: Stroke, geo: Geo, visibleRows: number) {
+  for (const m of handlePointsOf(s, geo, visibleRows)) drawHandle(ctx, m.x, m.y, s.color);
 }
 
 type PaintOpts = {
@@ -92,7 +118,7 @@ type PaintOpts = {
   draws: Draw[];
   settings: Settings;
   strokes: Stroke[];
-  markers?: Record<string, NumberStyle>;
+  markers?: Record<string, Marker>;
   skin: { brand: string; brandDeep: string; pale: string; paper: string; muted: string; grid: string; ink: string };
 };
 
@@ -111,6 +137,15 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   ctx.fillStyle = skin.pale;
   ctx.fillRect(geo.stageW, 0, geo.statW, o.height);
   ctx.fillRect(geo.stageW + geo.statW + geo.frontW * 4, 0, geo.endW, o.height);
+
+  // 连线画在号码下方：穿过号码时不遮挡数字
+  ctx.save();
+  ctx.translate(geo.stageW, 0);
+  for (const s of strokes) {
+    drawStrokeBody(ctx, s);
+    drawHandles(ctx, s, geo, visible.length);
+  }
+  ctx.restore();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -152,13 +187,13 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
           : geo.stageW + geo.statW + geo.frontW * 4 + geo.endW / 2;
       const mk = markers?.[`${d.period}:${c}`];
       const size = fs * 1.12;
-      if (mk && mk !== "text") {
-        const solid = mk === "solidCircle" || mk === "solidSquare";
-        const circle = mk === "hollowCircle" || mk === "solidCircle";
+      if (mk && mk.style !== "text") {
+        const solid = mk.style === "solidCircle" || mk.style === "solidSquare";
+        const circle = mk.style === "hollowCircle" || mk.style === "solidCircle";
         ctx.save();
         ctx.lineWidth = Math.max(1.5, fs * 0.07);
-        ctx.strokeStyle = "#FD3D44";
-        ctx.fillStyle = "#FD3D44";
+        ctx.strokeStyle = mk.color;
+        ctx.fillStyle = mk.color;
         ctx.beginPath();
         if (circle) ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
         else {
@@ -169,12 +204,12 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
         }
         if (solid) ctx.fill();
         else ctx.stroke();
-        ctx.fillStyle = solid ? "#ffffff" : "#FD3D44";
+        ctx.fillStyle = solid ? "#ffffff" : mk.color;
         ctx.font = `700 ${fs * 0.58}px Avenir, Helvetica, Arial, sans-serif`;
         ctx.fillText(d.num[c], cx, cy);
         ctx.restore();
       } else {
-        ctx.fillStyle = mk === "text" ? "#FD3D44" : c < 4 ? skin.ink : skin.muted;
+        ctx.fillStyle = mk ? mk.color : c < 4 ? skin.ink : skin.muted;
         ctx.font = `700 ${fs * 0.58}px Avenir, Helvetica, Arial, sans-serif`;
         ctx.fillText(d.num[c], cx, cy);
       }
@@ -189,8 +224,9 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   ctx.fillStyle = skin.brandDeep;
   ctx.fillRect(o.width - geo.endW - 1, 0, 2, o.height);
 
+  // 徽标层最后画（盖在号码上方，与页面表现一致）
   ctx.save();
   ctx.translate(geo.stageW, 0);
-  for (const s of strokes) drawStroke(ctx, s, visible.map((d) => d.num), fs);
+  for (const s of strokes) drawStrokeBadges(ctx, s, visible.map((d) => d.num), fs);
   ctx.restore();
 }

@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Draw } from "@/data/draws";
-import type { NumberStyle, Settings, Stroke, ToolMode, Point } from "./types";
+import type { Marker, Settings, Stroke, ToolMode, Point } from "./types";
 import { FONT_SCALE } from "./types";
-import { EMPTY_ROWS, drawStroke as paintStroke, midOf } from "./render";
+import { EMPTY_ROWS, drawHandles, drawStrokeBadges, drawStrokeBody, midOf, pointInCell } from "./render";
 
 export type Geometry = {
   u: number;
@@ -43,27 +43,11 @@ export function useGeometry(width: number, zoom = 100): Geometry {
   );
 }
 
-/** 号码样式 = 单击号码时盖上去的标记形状 */
-function markerClass(style: NumberStyle) {
-  switch (style) {
-    case "hollowSquare":
-      return "border-2 border-danger text-danger rounded-[0.045rem]";
-    case "hollowCircle":
-      return "border-2 border-danger text-danger rounded-full";
-    case "solidSquare":
-      return "bg-danger text-white rounded-[0.045rem]";
-    case "solidCircle":
-      return "bg-danger text-white rounded-full";
-    default:
-      return "text-danger";
-  }
-}
-
 type Props = {
   draws: Draw[];
   settings: Settings;
   strokes: Stroke[];
-  markers: Record<string, NumberStyle>;
+  markers: Record<string, Marker>;
   onCommit: (stroke: Stroke) => void;
   onUpdateStroke: (id: string, points: Point[]) => void;
   onToggleMarker: (period: string, col: number) => void;
@@ -107,6 +91,7 @@ export default function ChartBoard({
   onGeometry,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<Stroke | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -142,17 +127,20 @@ export default function ChartBoard({
     onGeometry?.(geo);
   }, [geo, onGeometry]);
 
-  /* ---------- 尺寸同步 ---------- */
-  useLayoutEffect(() => {
-    const el = canvasRef.current;
+  /* ---------- 尺寸同步（连线层与徽标层同几何） ---------- */
+  const syncSize = (el: HTMLCanvasElement | null, w: number, h: number) => {
     if (!el) return;
-    const w = Math.max(0, boardW - geo.stageW);
-    const h = boardH;
     const dpr = window.devicePixelRatio || 1;
     el.width = Math.round(w * dpr);
     el.height = Math.round(h * dpr);
     el.style.width = `${w}px`;
     el.style.height = `${h}px`;
+  };
+  useLayoutEffect(() => {
+    const w = Math.max(0, boardW - geo.stageW);
+    const h = boardH;
+    syncSize(canvasRef.current, w, h);
+    syncSize(bgCanvasRef.current, w, h);
     setCanvasSize({ w, h });
   }, [boardW, boardH, geo.stageW]);
 
@@ -209,19 +197,26 @@ export default function ChartBoard({
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  /* ---------- 绘制 ---------- */
+  /* ---------- 绘制：连线层在号码下方，徽标层在号码上方 ---------- */
   const render = useCallback(() => {
-    const el = canvasRef.current;
-    if (!el) return;
-    const ctx = el.getContext("2d");
-    if (!ctx) return;
+    const fg = canvasRef.current;
+    const bg = bgCanvasRef.current;
+    const cFg = fg?.getContext("2d");
+    const cBg = bg?.getContext("2d");
+    if (!cFg || !cBg) return;
     const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
+    cFg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cBg.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cFg.clearRect(0, 0, canvasSize.w, canvasSize.h);
+    cBg.clearRect(0, 0, canvasSize.w, canvasSize.h);
     const all = draft ? [...strokes, draft] : strokes;
     const digits = visible.map((d) => d.num);
-    for (const s of all) paintStroke(ctx, s, digits, numFs);
-  }, [strokes, draft, canvasSize, numFs, visible]);
+    for (const s of all) {
+      drawStrokeBody(cBg, s);
+      drawHandles(cBg, s, geo, visible.length);
+    }
+    for (const s of all) drawStrokeBadges(cFg, s, digits, numFs);
+  }, [strokes, draft, canvasSize, numFs, visible, geo]);
 
   useEffect(() => {
     render();
@@ -258,17 +253,19 @@ export default function ChartBoard({
     return null;
   };
 
-  /** 拖中点把手 = 折弯（两点直线首次拖动会插入一个中点） */
+  /** 拖中点把手 = 折弯（两点直线首次拖动会插入一个中点）；压在号码格上的把手不可抓 */
   const pickBend = (x: number, y: number): DragState | null => {
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       if (!s.badges || s.points.length < 2) continue;
       const last = s.points.length - 1;
-      const handles = s.points.length > 2 ? s.points.slice(1, -1) : [midOf(s.points[0], s.points[last])];
-      for (let k = 0; k < handles.length; k++) {
-        if (Math.hypot(handles[k].x - x, handles[k].y - y) < 24) {
-          return mkDrag(s, "bend", s.points.length > 2 ? k + 1 : -1, x, y);
-        }
+      const cand =
+        s.points.length > 2
+          ? s.points.slice(1, -1).map((p, k) => ({ p, index: k + 1 }))
+          : [{ p: midOf(s.points[0], s.points[last]), index: -1 }];
+      for (const c of cand) {
+        if (pointInCell(c.p, geo, visible.length)) continue;
+        if (Math.hypot(c.p.x - x, c.p.y - y) < 24) return mkDrag(s, "bend", c.index, x, y);
       }
     }
     return null;
@@ -453,13 +450,18 @@ export default function ChartBoard({
   const digit = (d: Draw, c: number) => {
     const m = markers[`${d.period}:${c}`];
     if (m) {
+      const solid = m.style === "solidSquare" || m.style === "solidCircle";
+      const circle = m.style === "hollowCircle" || m.style === "solidCircle";
       return (
         <span
-          className={`flex items-center justify-center font-bold leading-none ${markerClass(m)}`}
+          className={`flex items-center justify-center font-bold leading-none ${m.style === "text" || circle ? "" : "rounded-[0.045rem]"} ${circle ? "rounded-full" : ""}`}
           style={{
             fontSize: numFs,
-            width: m === "text" ? undefined : mkSize,
-            height: m === "text" ? undefined : mkSize,
+            width: m.style === "text" ? undefined : mkSize,
+            height: m.style === "text" ? undefined : mkSize,
+            color: solid ? "#ffffff" : m.color,
+            background: solid ? m.color : undefined,
+            border: m.style === "text" || solid ? undefined : `2px solid ${m.color}`,
           }}
         >
           {d.num[c]}
@@ -493,6 +495,13 @@ export default function ChartBoard({
           style={{ left: geo.stageW + geo.statW, width: geo.frontW * 4 }}
         />
         <div className="absolute inset-y-0 right-0 bg-pale" style={{ width: geo.endW }} />
+
+        {/* 连线层：在号码下方 —— 线条穿过号码不遮挡数字 */}
+        <canvas
+          ref={bgCanvasRef}
+          className="pointer-events-none absolute top-0"
+          style={{ left: geo.stageW }}
+        />
 
         {/* 行 */}
         <div className="relative flex flex-col">
@@ -572,7 +581,7 @@ export default function ChartBoard({
           style={{ right: geo.endW - 1, width: 2 }}
         />
 
-        {/* 绘图层：锁定时完全不拦截触摸，滚动交还给容器（不卡顿） */}
+        {/* 徽标层（最上）：只画端点徽标；锁定时完全不拦截触摸，滚动交还给容器 */}
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}

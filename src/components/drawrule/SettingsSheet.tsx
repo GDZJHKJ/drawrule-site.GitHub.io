@@ -228,7 +228,7 @@ export default function SettingsSheet({ open, settings, onChange, onClose, onSec
           </div>
         </Group>
 
-        <Group title="号码样式">
+        <Group title="号码样式（颜色随画笔）">
           <div className="grid grid-cols-5 gap-[0.04rem]">
             {numOpts.map((o) => {
               const active = settings.numStyle === o.key;
