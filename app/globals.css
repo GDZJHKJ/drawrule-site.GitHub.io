@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* ============================================================
+   设计 token（数值均来自对源站的 getComputedStyle 勘查）
+   根字号 26.667vw → 390px 视口下 = 104px，0.01rem ≈ 1.04px
+   ============================================================ */
+@theme inline {
+  --font-sans: Avenir, Helvetica, Arial, "Heiti SC", "PingFang SC", sans-serif;
+
+  /* 皮肤色（可被 [data-skin] 覆盖） */
+  --color-brand: var(--skin-brand);
+  --color-brand-deep: var(--skin-brand-deep);
+  --color-pale: var(--skin-pale);
+  --color-grid: var(--skin-grid);
+  --color-muted: var(--skin-muted);
+  --color-paper: var(--skin-paper);
+  --color-ink: var(--skin-ink);
+  --color-danger: #fd3d44;
+  --color-pen: #fe0000;
+  --color-bar: rgba(76, 75, 75, 0.8);
+
+  /* 尺寸（rem，随根字号缩放） */
+  --spacing-row: 0.48rem;
+  --spacing-stage: 0.71rem;
+  --spacing-stat: 0.298rem;
+  --spacing-front: 0.548rem;
+  --spacing-end: 0.538rem;
+  --spacing-tool: 0.48rem;
+
+  --text-label: 0.12rem;
+  --text-stage: 0.16rem;
+  --text-date: 0.10rem;
+  --text-num: 0.30rem;
+
+  --radius-pill: 0.5rem;
+}
+
+/* 默认皮肤：护眼（源站当前皮肤，实测色值） */
+:root {
+  --skin-brand: #93c385;
+  --skin-brand-deep: #77a067;
+  --skin-pale: #eff9ca;
+  --skin-grid: #cee2cc;
+  --skin-muted: #a3c199;
+  --skin-paper: #ffffff;
+  --skin-ink: #93c385;
+}
+
+/* 经典（白底红调，按设置页缩略图近似） */
+[data-skin="classic"] {
+  --skin-brand: #e8615a;
+  --skin-brand-deep: #c94a44;
+  --skin-pale: #fdeeed;
+  --skin-grid: #f3d9d7;
+  --skin-muted: #c48c88;
+  --skin-paper: #ffffff;
+  --skin-ink: #e8615a;
+}
+
+/* 夜间（深灰底白字） */
+[data-skin="night"] {
+  --skin-brand: #2a2a2a;
+  --skin-brand-deep: #454545;
+  --skin-pale: #1e1e1e;
+  --skin-grid: #333333;
+  --skin-muted: #8a8a8a;
+  --skin-paper: #141414;
+  --skin-ink: #e8e8e8;
+}
+
+/* 怀旧（米黄纸张 + 砖红） */
+[data-skin="vintage"] {
+  --skin-brand: #b5462f;
+  --skin-brand-deep: #8e3524;
+  --skin-pale: #f6e7c9;
+  --skin-grid: #e2cda8;
+  --skin-muted: #b08a63;
+  --skin-paper: #fbf3e6;
+  --skin-ink: #b5462f;
+}
+
+/* 根字号：源站按 750 设计稿等比缩放（26.667vw） */
+html {
+  font-size: 26.667vw;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--skin-brand);
+  color: var(--skin-ink);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+}
+
+/* 桌面：源站会把整页等比放大到 1440px（字号 46px 级），这里收成居中画板 */
+@media (min-width: 480px) {
+  html {
+    font-size: 104px;
+  }
+  body {
+    background: #e9ece9;
+  }
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--skin-paper);
+}
+
+@media (min-width: 480px) {
+  .app-shell {
+    width: 390px;
+    margin: 0 auto;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 24px 60px rgba(0, 0, 0, 0.12);
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 引导竖排文字 */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.04em;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sheet-enter {
+  animation: sheet-in 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+}
