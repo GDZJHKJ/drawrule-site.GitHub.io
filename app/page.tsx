@@ -9,7 +9,7 @@ import TutorialMask from "@/components/drawrule/TutorialMask";
 import DataAdmin from "@/components/drawrule/DataAdmin";
 import SavePreview from "@/components/drawrule/SavePreview";
 import { DEFAULT_SETTINGS, type Marker, type Point, type Settings, type Stroke, type ToolMode } from "@/components/drawrule/types";
-import { paintChart } from "@/components/drawrule/render";
+import { paintChart, rangeHeight } from "@/components/drawrule/render";
 import { useDraws } from "@/lib/draws";
 
 const STORE_KEY = "drawrule:settings:v1";
@@ -250,12 +250,45 @@ export default function Page() {
     }
   };
 
-  /* 分享：生成整张画板长图并预览，长按即可保存 / 转发 */
+  /* 分享：按画规实际覆盖的期数裁剪出图 —— 画了几期就带几期，
+   * 上下各留 3 期上下文；没画内容时只取最近 12 期，避免带出几十期空号 */
   const makeImage = async () => {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = geo.boardW;
-    const total = Math.min(settings.rows, draws.length) + 6;
-    const h = geo.rowH * total;
+    const visible = draws.slice(-settings.rows);
+    if (!visible.length) return;
+    const last = visible.length - 1;
+
+    // 画规（连线 + 号码标记）覆盖到的行范围
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    const touch = (r: number) => {
+      const rr = Math.max(0, Math.min(last, Math.floor(r)));
+      if (rr < minRow) minRow = rr;
+      if (rr > maxRow) maxRow = rr;
+    };
+    for (const s of strokes) for (const p of s.points) touch(p.y / geo.rowH);
+    const rowOfPeriod = new Map(visible.map((d, i) => [d.period, i]));
+    for (const key of Object.keys(markers)) {
+      const r = rowOfPeriod.get(key.split(":")[0]);
+      if (r !== undefined) touch(r);
+    }
+
+    let from: number;
+    let to: number;
+    if (maxRow < 0) {
+      to = last;
+      from = Math.max(0, last - 11);
+    } else {
+      from = Math.max(0, minRow - 3);
+      to = Math.min(last, maxRow + 3);
+      if (to >= last - 5) to = last; // 离最新期很近就直接到底，带上「下一期」
+      if (to - from + 1 < 8) {
+        to = Math.min(last, from + 7); // 至少 8 行，避免图片过矮
+        from = Math.max(0, to - 7);
+      }
+    }
+    const h = rangeHeight(geo, visible.length, { from, to });
     const cv = document.createElement("canvas");
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
@@ -272,6 +305,7 @@ export default function Page() {
       settings,
       strokes,
       markers,
+      rowRange: { from, to },
       skin: {
         brand: c("--skin-brand", "#93c385"),
         brandDeep: c("--skin-brand-deep", "#77a067"),

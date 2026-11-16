@@ -103,7 +103,15 @@ type PaintOpts = {
   strokes: Stroke[];
   markers?: Record<string, Marker>;
   skin: { brand: string; brandDeep: string; pale: string; paper: string; muted: string; grid: string; ink: string };
+  /** 只画 visible 的 [from, to] 行（含）；画到最新期时自动带上「下一期」空行。用于分享图按画规范围裁剪 */
+  rowRange?: { from: number; to: number };
 };
+
+/** 按行范围计算导出图高度（与 paintChart 内部取行规则一致） */
+export function rangeHeight(geo: Geo, visibleCount: number, range: { from: number; to: number }) {
+  const end = range.to === visibleCount - 1 ? visibleCount : range.to;
+  return geo.rowH * (end - range.from + 1);
+}
 
 /** 把整块画板（背景 + 行 + 网格 + 绘线）画到 2D 上下文，用于导出 PNG */
 export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
@@ -112,6 +120,14 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   const visible = draws.slice(-rows);
   const total = visible.length + EMPTY_ROWS;
   const fs = FONT_SCALE[settings.fontSize] * geo.u * 0.3;
+
+  // 行范围裁剪：分享图只画有画规的区段；不裁剪时保持整块画板
+  const lastIdx = visible.length - 1;
+  const cropped = !!o.rowRange && visible.length > 0;
+  const from = cropped ? Math.max(0, Math.min(o.rowRange!.from, lastIdx)) : 0;
+  const to = cropped ? Math.max(from, Math.min(o.rowRange!.to, lastIdx)) : total - 1;
+  // 裁剪且画到最新期时，多带一行「下一期」空行（与 rangeHeight 规则一致）
+  const end = cropped && to === lastIdx ? visible.length : to;
 
   ctx.fillStyle = skin.paper;
   ctx.fillRect(0, 0, o.width, o.height);
@@ -122,16 +138,17 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   ctx.fillRect(geo.stageW + geo.statW + geo.frontW * 4, 0, geo.endW, o.height);
 
   // 连线画在号码下方：穿过号码时不遮挡数字（导出图不含临时折弯把手）
+  // 裁剪时整体上移 from 行，让 [from, end] 区段正好铺满画布
   ctx.save();
-  ctx.translate(geo.stageW, 0);
+  ctx.translate(geo.stageW, -geo.rowH * from);
   for (const s of strokes) drawStrokeBody(ctx, s);
   ctx.restore();
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  for (let i = 0; i < total; i++) {
+  for (let i = from; i <= end; i++) {
+    const y = geo.rowH * (i - from);
     const d = visible[i];
-    const y = geo.rowH * i;
     const cy = y + geo.rowH / 2;
     const bold =
       settings.divider === "all" ||
@@ -204,9 +221,9 @@ export function paintChart(ctx: CanvasRenderingContext2D, o: PaintOpts) {
   ctx.fillStyle = skin.brandDeep;
   ctx.fillRect(o.width - geo.endW - 1, 0, 2, o.height);
 
-  // 徽标层最后画（盖在号码上方，与页面表现一致）
+  // 徽标层最后画（盖在号码上方，与页面表现一致），同样上移 from 行
   ctx.save();
-  ctx.translate(geo.stageW, 0);
+  ctx.translate(geo.stageW, -geo.rowH * from);
   for (const s of strokes) drawStrokeBadges(ctx, s, visible.map((d) => d.num), fs);
   ctx.restore();
 }
