@@ -227,7 +227,10 @@ export default function ChartBoard({
     render();
   }, [render]);
 
-  /* ---------- 命中测试 ---------- */
+  /* ---------- 命中测试 ----------
+   * 优先级：端点徽标（本来就盖在号码格正中）> 号码格 > 折弯把手 > 自由笔迹。
+   * 号码格优先于线条：连线可以穿过号码，但不能挡住号码的点击。
+   */
   const segDist = (px: number, py: number, a: Point, b: Point) => {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -236,65 +239,52 @@ export default function ChartBoard({
     return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy));
   };
 
-  /**
-   * 只允许「改端点」和「折弯」，不再支持整条平移 ——
-   * 号码之间的连线始终挂在号码格上，不会被拖到画板外乱跑。
-   */
-  const pickStroke = (x: number, y: number): DragState | null => {
-    const badgeR = numFs * 0.62;
+  const mkDrag = (s: Stroke, mode: DragState["mode"], index: number, x: number, y: number): DragState => {
+    const copy = s.points.map((p) => ({ ...p }));
+    return { id: s.id, mode, index, base: copy, points: copy, startX: x, startY: y };
+  };
+
+  /** 拖端点 = 换挂靠号码（徽标压在号码格正中，半径很小，保持最高优先级） */
+  const pickEndpoint = (x: number, y: number): DragState | null => {
+    const r = numFs * 0.62 + 6;
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
-      if (s.points.length < 2) continue;
-      const copy = s.points.map((p) => ({ ...p }));
+      if (!s.badges || s.points.length < 2) continue;
       const last = s.points.length - 1;
-
-      // 1) 端点徽标：拖动即换号（吸附到最近号码格）
-      if (s.badges) {
-        const ends = [s.points[0], s.points[last]];
-        for (let k = 0; k < ends.length; k++) {
-          if (Math.hypot(ends[k].x - x, ends[k].y - y) < badgeR + 6) {
-            return { id: s.id, mode: "endpoint", index: k === 0 ? 0 : last, base: copy, points: copy, startX: x, startY: y };
-          }
-        }
+      for (const k of [0, last]) {
+        if (Math.hypot(s.points[k].x - x, s.points[k].y - y) < r) return mkDrag(s, "endpoint", k, x, y);
       }
+    }
+    return null;
+  };
 
-      // 2) 中点把手：拖动即折弯（两点直线首次拖动会插入一个中点）
-      if (s.badges) {
-        const handles = s.points.length > 2 ? s.points.slice(1, -1) : [midOf(s.points[0], s.points[last])];
-        for (let k = 0; k < handles.length; k++) {
-          if (Math.hypot(handles[k].x - x, handles[k].y - y) < 24) {
-            return {
-              id: s.id,
-              mode: "bend",
-              index: s.points.length > 2 ? k + 1 : -1,
-              base: copy,
-              points: copy,
-              startX: x,
-              startY: y,
-            };
-          }
-        }
-      }
-
-      // 3) 自由笔迹：只能整体平移，且松手前会被夹在画板内
-      if (!s.badges) {
-        for (let k = 0; k < s.points.length - 1; k++) {
-          if (segDist(x, y, s.points[k], s.points[k + 1]) < 14) {
-            return { id: s.id, mode: "pan", index: -1, base: copy, points: copy, startX: x, startY: y };
-          }
+  /** 拖中点把手 = 折弯（两点直线首次拖动会插入一个中点） */
+  const pickBend = (x: number, y: number): DragState | null => {
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      if (!s.badges || s.points.length < 2) continue;
+      const last = s.points.length - 1;
+      const handles = s.points.length > 2 ? s.points.slice(1, -1) : [midOf(s.points[0], s.points[last])];
+      for (let k = 0; k < handles.length; k++) {
+        if (Math.hypot(handles[k].x - x, handles[k].y - y) < 24) {
+          return mkDrag(s, "bend", s.points.length > 2 ? k + 1 : -1, x, y);
         }
       }
     }
     return null;
   };
 
-  /** 是否点在了已有线条上（用于阻止在线上误起新线） */
-  const hitAnyStroke = (x: number, y: number) =>
-    strokes.some(
-      (s) =>
-        s.points.length > 1 &&
-        s.points.some((p, i) => i > 0 && segDist(x, y, s.points[i - 1], p) < 16),
-    );
+  /** 自由笔迹：只能整体平移，且松手前会被夹在画板内 */
+  const pickFree = (x: number, y: number): DragState | null => {
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      if (s.badges || s.points.length < 2) continue;
+      for (let k = 0; k < s.points.length - 1; k++) {
+        if (segDist(x, y, s.points[k], s.points[k + 1]) < 14) return mkDrag(s, "pan", -1, x, y);
+      }
+    }
+    return null;
+  };
 
   /* ---------- 指针交互 ---------- */
   const onPointerDown = (e: React.PointerEvent) => {
@@ -302,27 +292,53 @@ export default function ChartBoard({
     const { x, y } = toLocal(e);
     tapRef.current = { x: e.clientX, y: e.clientY, moved: false };
 
-    const hit = pickStroke(x, y);
-    if (hit) {
-      dragRef.current = hit;
+    // 1) 端点徽标优先：徽标本来就盖在号码格正中，点中徽标 = 拖端点换号
+    const ep = pickEndpoint(x, y);
+    if (ep) {
+      dragRef.current = ep;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
-    // 点在既有线条上但不落在端点/把手上：不新建线条
-    if (hitAnyStroke(x, y)) return;
 
+    // 2) 号码格优先于线条：即使有连线穿过该号码，点击/起线仍然归号码
     const cell = hitCell(x, y);
-    if (!cell && tool !== "free") return;
-    const start: Point = cell ? { ...cellCenter(cell.row, cell.col), ...cell } : { x, y };
-    const stroke: Stroke = {
+    if (cell) {
+      const start: Point = { ...cellCenter(cell.row, cell.col), ...cell };
+      const stroke: Stroke = {
+        id: `s${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
+        mode: tool,
+        color,
+        width: 2.5,
+        points: [start],
+        badges: tool !== "free",
+      };
+      setDraft(stroke);
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // 3) 非号码区：折弯把手 → 自由笔迹平移 → 自由画笔起笔
+    const bend = pickBend(x, y);
+    if (bend) {
+      dragRef.current = bend;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+    const pan = pickFree(x, y);
+    if (pan) {
+      dragRef.current = pan;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      return;
+    }
+    if (tool !== "free") return;
+    setDraft({
       id: `s${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
-      mode: tool,
+      mode: "free",
       color,
       width: 2.5,
-      points: [start],
-      badges: tool !== "free",
-    };
-    setDraft(stroke);
+      points: [{ x, y }],
+      badges: false,
+    });
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
 
